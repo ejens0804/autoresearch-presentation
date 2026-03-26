@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AutoResearch — Karpathy's AI That Never Sleeps</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Bebas+Neue&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #050810; --surface: #0c1220;
+    --green: #00ff9d; --cyan: #00cfff;
+    --amber: #ffb700; --red: #ff4466;
+    --text: #e8edf8; --muted: #7a8aaa;
+    --border: rgba(0,255,157,0.15);
+  }
+  html, body { width:100%; height:100%; background:var(--bg); color:var(--text); font-family:'DM Sans',sans-serif; overflow:hidden; user-select:none; }
+  body::before { content:''; position:fixed; inset:0; background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E"); background-size:200px; pointer-events:none; z-index:999; opacity:0.5; }
+  .grid-bg { position:fixed; inset:0; background-image:linear-gradient(rgba(0,255,157,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,255,157,0.03) 1px,transparent 1px); background-size:60px 60px; animation:gridPulse 8s ease-in-out infinite; }
+  @keyframes gridPulse { 0%,100%{opacity:.5} 50%{opacity:1} }
+  .orb { position:fixed; border-radius:50%; filter:blur(100px); pointer-events:none; z-index:0; opacity:.12; }
+  .orb-1 { width:500px; height:500px; background:#00ff9d; top:-200px; left:-150px; animation:o1 12s ease-in-out infinite; }
+  .orb-2 { width:400px; height:400px; background:#00cfff; bottom:-150px; right:-100px; animation:o2 10s ease-in-out infinite; }
+  @keyframes o1 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(60px,40px)} }
+  @keyframes o2 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(-50px,-30px)} }
+  @keyframes scanline { 0%{transform:translateY(-100%)} 100%{transform:translateY(100vh)} }
+  .scanline { position:fixed; left:0; right:0; height:2px; background:linear-gradient(transparent,rgba(0,255,157,0.07),transparent); animation:scanline 6s linear infinite; pointer-events:none; z-index:998; }
+
+  /* HUD */
+  #progress-track { position:fixed; top:0; left:0; right:0; height:3px; background:rgba(255,255,255,.07); z-index:100; }
+  #progress-fill { height:100%; background:linear-gradient(90deg,var(--green),var(--cyan)); width:0%; transition:width .1s linear; box-shadow:0 0 12px var(--green); }
+  #timer { position:fixed; top:16px; right:20px; font-family:'Space Mono',monospace; font-size:12px; color:var(--green); z-index:100; letter-spacing:2px; opacity:.8; }
+  #slide-counter { position:fixed; top:16px; left:20px; font-family:'Space Mono',monospace; font-size:11px; color:var(--muted); z-index:100; letter-spacing:1px; }
+  #slide-counter span { color:var(--green); }
+  #controls { position:fixed; bottom:16px; right:20px; display:flex; gap:10px; z-index:200; }
+  .ctrl-btn { background:rgba(0,255,157,.08); border:1px solid var(--border); color:var(--green); font-family:'Space Mono',monospace; font-size:11px; padding:6px 14px; cursor:pointer; letter-spacing:1px; transition:background .2s; }
+  .ctrl-btn:hover { background:rgba(0,255,157,.2); }
+
+  /* Subtitle */
+  #subtitle-bar { position:fixed; bottom:0; left:0; right:0; min-height:90px; background:linear-gradient(to top,rgba(5,8,16,.98),rgba(5,8,16,.7)); display:flex; align-items:center; justify-content:center; padding:16px 80px; border-top:1px solid var(--border); z-index:50; }
+  #subtitle-text { font-size:clamp(14px,2vw,18px); font-weight:300; color:#d8e4f0; text-align:center; line-height:1.65; max-width:900px; letter-spacing:.02em; }
+  #subtitle-text strong { color:var(--green); font-weight:500; }
+
+  /* Slides */
+  #stage { position:relative; width:100vw; height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+  .slide { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:60px 80px 130px; opacity:0; pointer-events:none; transition:opacity .6s ease; }
+  .slide.active { opacity:1; pointer-events:all; }
+
+  /* Shared type */
+  .eyebrow { font-family:'Space Mono',monospace; font-size:11px; letter-spacing:4px; color:var(--green); text-transform:uppercase; margin-bottom:18px; opacity:0; transform:translateY(10px); transition:all .5s ease .1s; }
+  .slide.active .eyebrow { opacity:1; transform:translateY(0); }
+  .headline { font-family:'Bebas Neue',sans-serif; font-size:clamp(52px,8vw,108px); line-height:.95; letter-spacing:2px; text-align:center; opacity:0; transform:translateY(20px); transition:all .6s ease .2s; text-shadow:0 0 60px rgba(0,207,255,.18); }
+  .slide.active .headline { opacity:1; transform:translateY(0); }
+  .headline .a { color:var(--green); } .headline .d { color:var(--muted); }
+  .sub { font-family:'Bebas Neue',sans-serif; font-size:clamp(26px,4vw,56px); line-height:1.1; text-align:center; opacity:0; transform:translateY(14px); transition:all .6s ease .35s; margin-top:8px; }
+  .slide.active .sub { opacity:1; transform:translateY(0); }
+  .sub .a { color:var(--cyan); }
+  .body-text { font-size:clamp(14px,1.8vw,19px); color:var(--muted); text-align:center; max-width:680px; line-height:1.7; margin-top:22px; opacity:0; transition:opacity .6s ease .5s; }
+  .slide.active .body-text { opacity:1; }
+  .body-text strong { color:var(--text); }
+
+  /* — S1 Title — */
+  #s1 .logo-mark { font-family:'Space Mono',monospace; font-size:11px; letter-spacing:6px; color:rgba(0,255,157,.4); margin-bottom:28px; opacity:0; transition:opacity .8s ease 0s; }
+  #s1.active .logo-mark { opacity:1; }
+  #s1 .tagline { margin-top:26px; font-size:17px; color:var(--muted); font-weight:300; text-align:center; max-width:560px; line-height:1.65; opacity:0; transition:opacity .6s ease .7s; }
+  #s1.active .tagline { opacity:1; }
+  #s1 .badge { margin-top:22px; display:inline-flex; align-items:center; gap:8px; background:rgba(0,255,157,.06); border:1px solid var(--border); padding:8px 22px; font-family:'Space Mono',monospace; font-size:11px; color:var(--green); letter-spacing:2px; opacity:0; transition:opacity .6s ease .9s; }
+  #s1.active .badge { opacity:1; }
+
+  /* — S2 Problem — */
+  .old-steps { display:flex; align-items:stretch; gap:0; margin-top:32px; opacity:0; transition:opacity .7s ease .4s; flex-wrap:wrap; justify-content:center; }
+  .slide.active .old-steps { opacity:1; }
+  .os { background:rgba(255,68,102,.05); border:1px solid rgba(255,68,102,.2); padding:18px 20px; text-align:center; min-width:105px; }
+  .os-icon { font-size:26px; margin-bottom:8px; }
+  .os-label { font-size:13px; color:#c08090; line-height:1.3; }
+  .os-arrow { display:flex; align-items:center; color:rgba(255,68,102,.35); font-size:20px; padding:0 3px; }
+  .pain-row { display:flex; gap:32px; margin-top:22px; opacity:0; transition:opacity .6s ease .6s; }
+  .slide.active .pain-row { opacity:1; }
+  .pi { text-align:center; }
+  .pi-num { font-family:'Bebas Neue',sans-serif; font-size:44px; color:var(--red); line-height:1; }
+  .pi-label { font-size:11px; color:var(--muted); font-family:'Space Mono',monospace; letter-spacing:1px; margin-top:4px; }
+
+  /* — S3 Big Idea — */
+  .analogy { margin-top:28px; max-width:620px; width:100%; background:rgba(0,255,157,.04); border:1px solid rgba(0,255,157,.15); padding:26px 34px; text-align:center; position:relative; opacity:0; transition:opacity .7s ease .4s; }
+  .analogy::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:linear-gradient(90deg,transparent,var(--green),transparent); }
+  .slide.active .analogy { opacity:1; }
+  .analogy-emoji { font-size:40px; margin-bottom:12px; }
+  .analogy-title { font-family:'Bebas Neue',sans-serif; font-size:26px; color:var(--green); margin-bottom:10px; letter-spacing:1px; }
+  .analogy-desc { font-size:15px; color:#a0b0c8; line-height:1.7; }
+  .analogy-desc strong { color:var(--text); }
+  .three-cards { display:flex; gap:16px; margin-top:20px; opacity:0; transition:opacity .6s ease .6s; justify-content:center; flex-wrap:wrap; }
+  .slide.active .three-cards { opacity:1; }
+  .tc { background:rgba(0,207,255,.05); border:1px solid rgba(0,207,255,.15); padding:15px 18px; text-align:center; max-width:185px; }
+  .tc-icon { font-size:22px; margin-bottom:8px; }
+  .tc-label { font-size:13px; color:#80a8c0; line-height:1.5; }
+  .tc-label strong { color:var(--cyan); display:block; font-size:10px; letter-spacing:2px; text-transform:uppercase; margin-bottom:4px; font-family:'Space Mono',monospace; }
+
+  /* — S4 How — */
+  .steps-list { display:flex; flex-direction:column; gap:12px; margin-top:26px; max-width:560px; width:100%; opacity:0; transition:opacity .7s ease .4s; }
+  .slide.active .steps-list { opacity:1; }
+  .sl-row { display:flex; align-items:center; gap:16px; padding:13px 18px; background:rgba(255,255,255,.02); border-left:2px solid var(--green); }
+  .sl-row.fail { border-left-color:var(--red); }
+  .sl-icon { font-size:22px; min-width:30px; text-align:center; }
+  .sl-text { font-size:14px; color:var(--muted); line-height:1.4; }
+  .sl-text strong { color:var(--text); }
+  .clock-row { display:flex; gap:36px; margin-top:20px; opacity:0; transition:opacity .6s ease .6s; }
+  .slide.active .clock-row { opacity:1; }
+  .cr-item { text-align:center; }
+  .cr-val { font-family:'Space Mono',monospace; font-size:22px; color:var(--cyan); }
+  .cr-label { font-size:11px; color:var(--muted); letter-spacing:1px; margin-top:4px; }
+
+  /* — S5 Results — */
+  .result-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:14px; margin-top:26px; max-width:660px; width:100%; opacity:0; transition:opacity .7s ease .4s; }
+  .slide.active .result-grid { opacity:1; }
+  .rc { padding:18px 22px; border:1px solid; }
+  .rc-stars  { background:rgba(0,207,255,.05);  border-color:rgba(0,207,255,.2); }
+  .rc-shopify{ background:rgba(0,255,157,.05);  border-color:rgba(0,255,157,.2); }
+  .rc-views  { background:rgba(255,183,0,.05);  border-color:rgba(255,183,0,.2); }
+  .rc-bug    { background:rgba(255,68,102,.05); border-color:rgba(255,68,102,.2); }
+  .rc-big { font-family:'Bebas Neue',sans-serif; font-size:50px; line-height:1; }
+  .rc-stars  .rc-big { color:var(--cyan); }
+  .rc-shopify .rc-big { color:var(--green); }
+  .rc-views  .rc-big { color:var(--amber); }
+  .rc-bug    .rc-big { color:var(--red); font-size:38px; }
+  .rc-desc { font-size:13px; color:var(--muted); margin-top:6px; line-height:1.5; }
+  .rc-desc strong { color:var(--text); }
+
+  /* — S6 Meaning — */
+  .meaning-cards { display:flex; gap:16px; margin-top:28px; opacity:0; transition:opacity .7s ease .4s; flex-wrap:wrap; justify-content:center; }
+  .slide.active .meaning-cards { opacity:1; }
+  .mc { background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.07); padding:20px 22px; max-width:200px; text-align:center; }
+  .mc-icon { font-size:30px; margin-bottom:10px; }
+  .mc-title { font-family:'Space Mono',monospace; font-size:10px; letter-spacing:2px; color:var(--green); text-transform:uppercase; margin-bottom:7px; }
+  .mc-desc { font-size:13px; color:var(--muted); line-height:1.5; }
+  .quote-block { margin-top:22px; max-width:580px; text-align:center; opacity:0; transition:opacity .6s ease .6s; }
+  .slide.active .quote-block { opacity:1; }
+  .qt { font-size:15px; color:#a0b8d0; font-style:italic; line-height:1.7; }
+  .qt strong { color:var(--text); font-style:normal; }
+  .qa { margin-top:9px; font-family:'Space Mono',monospace; font-size:10px; letter-spacing:2px; color:var(--green); }
+
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+  .cursor { display:inline-block; width:10px; height:1.1em; background:var(--green); animation:blink 1s step-end infinite; vertical-align:text-bottom; margin-left:2px; }
+</style>
+</head>
+<body>
+
+<div class="grid-bg"></div>
+<div class="orb orb-1"></div><div class="orb orb-2"></div>
+<div class="scanline"></div>
+
+<div id="progress-track"><div id="progress-fill"></div></div>
+<div id="timer">0:00 / 1:00</div>
+<div id="slide-counter">SLIDE <span id="cur-slide">1</span> / 6</div>
+<div id="controls">
+  <button class="ctrl-btn" onclick="restartPres()">↺ RESTART</button>
+  <button class="ctrl-btn" id="play-btn" onclick="togglePlay()">⏸ PAUSE</button>
+</div>
+
+<div id="stage">
+
+  <!-- S1 TITLE -->
+  <div class="slide active" id="s1">
+    <div class="logo-mark">A BREAKTHROUGH BY ANDREJ KARPATHY</div>
+    <div class="eyebrow">Introduced March 2026 · Free & Open Source</div>
+    <div class="headline"><span class="a">AUTO</span>RESEARCH</div>
+    <div class="sub">The <span class="a">AI assistant</span> that never sleeps</div>
+    <div class="tagline">What if an AI could run hundreds of scientific experiments overnight — so you wake up to real discoveries instead of more waiting?</div>
+    <div class="badge">▶ 21,000+ PEOPLE ALREADY EXCITED ABOUT THIS</div>
+  </div>
+
+  <!-- S2 THE PROBLEM -->
+  <div class="slide" id="s2">
+    <div class="eyebrow">The Problem It Solves</div>
+    <div class="headline"><span class="d">Science used to mean</span> <span class="a">a lot of waiting</span></div>
+    <div class="old-steps">
+      <div class="os"><div class="os-icon">💡</div><div class="os-label">Have an idea</div></div>
+      <div class="os-arrow">→</div>
+      <div class="os"><div class="os-icon">🛠️</div><div class="os-label">Try it out</div></div>
+      <div class="os-arrow">→</div>
+      <div class="os"><div class="os-icon">⏳</div><div class="os-label">Wait hours</div></div>
+      <div class="os-arrow">→</div>
+      <div class="os"><div class="os-icon">📋</div><div class="os-label">Check results</div></div>
+      <div class="os-arrow">→</div>
+      <div class="os"><div class="os-icon">🔁</div><div class="os-label">Repeat forever</div></div>
+    </div>
+    <div class="pain-row">
+      <div class="pi"><div class="pi-num">~10</div><div class="pi-label">experiments a week</div></div>
+      <div class="pi"><div class="pi-num">100%</div><div class="pi-label">human effort</div></div>
+      <div class="pi"><div class="pi-num">SLOW</div><div class="pi-label">pace of progress</div></div>
+    </div>
+    <div class="body-text">AI researchers have been stuck in this cycle for decades. Progress is limited entirely by <strong>how fast a person can work</strong> — and people need sleep.</div>
+  </div>
+
+  <!-- S3 THE BIG IDEA -->
+  <div class="slide" id="s3">
+    <div class="eyebrow">The Big Idea</div>
+    <div class="headline">What if <span class="a">AI</span> did the <span class="d">experimenting?</span></div>
+    <div class="analogy">
+      <div class="analogy-emoji">🔬🤖</div>
+      <div class="analogy-title">Think of it like a robot lab assistant</div>
+      <div class="analogy-desc">
+        You leave a <strong>note on the whiteboard</strong> explaining what you want to improve.<br>
+        Overnight, your tireless robot runs <strong>hundreds of trials,</strong> keeps what works, and tosses what doesn't.<br>
+        By morning, you have a <strong>list of real improvements</strong> — all discovered while you slept.
+      </div>
+    </div>
+    <div class="three-cards">
+      <div class="tc"><div class="tc-icon">📝</div><div class="tc-label"><strong>You Describe</strong>Write what you want improved in plain language</div></div>
+      <div class="tc"><div class="tc-icon">🤖</div><div class="tc-label"><strong>AI Experiments</strong>It tries idea after idea, completely on its own</div></div>
+      <div class="tc"><div class="tc-icon">✅</div><div class="tc-label"><strong>Keeps Winners</strong>Good results are saved. Bad ones are quietly discarded</div></div>
+    </div>
+  </div>
+
+  <!-- S4 HOW IT WORKS -->
+  <div class="slide" id="s4">
+    <div class="eyebrow">How It Works</div>
+    <div class="headline" style="font-size:clamp(40px,6vw,78px);">Go to sleep. <span class="a">Wake up to answers.</span></div>
+    <div class="steps-list">
+      <div class="sl-row"><div class="sl-icon">💤</div><div class="sl-text">You go to sleep. The AI starts running experiments — one every <strong>5 minutes,</strong> all through the night.</div></div>
+      <div class="sl-row"><div class="sl-icon">✅</div><div class="sl-text"><strong>Something works better →</strong> the AI saves it as the new best result and continues building on it.</div></div>
+      <div class="sl-row fail"><div class="sl-icon">❌</div><div class="sl-text"><strong>Something doesn't work →</strong> it's automatically discarded. The AI tries a different approach. No human needed.</div></div>
+      <div class="sl-row"><div class="sl-icon">☀️</div><div class="sl-text">You wake up to a <strong>full log of everything tried</strong> and a measurably better result — delivered automatically.</div></div>
+    </div>
+    <div class="clock-row">
+      <div class="cr-item"><div class="cr-val">~100</div><div class="cr-label">experiments overnight</div></div>
+      <div class="cr-item"><div class="cr-val">5 min</div><div class="cr-label">per experiment</div></div>
+      <div class="cr-item"><div class="cr-val">0</div><div class="cr-label">humans required</div></div>
+    </div>
+  </div>
+
+  <!-- S5 RESULTS -->
+  <div class="slide" id="s5">
+    <div class="eyebrow">Why the World Is Paying Attention</div>
+    <div class="headline"><span class="a">Real results,</span> <span class="d">overnight</span></div>
+    <div class="result-grid">
+      <div class="rc rc-stars">
+        <div class="rc-big">21K+</div>
+        <div class="rc-desc">People bookmarked the project within days — a sign of <strong>enormous excitement</strong> across the tech world</div>
+      </div>
+      <div class="rc rc-shopify">
+        <div class="rc-big">53%</div>
+        <div class="rc-desc">Shopify's CEO used AutoResearch on his website's code and it got <strong>53% faster in one night</strong></div>
+      </div>
+      <div class="rc rc-views">
+        <div class="rc-big">8.6M</div>
+        <div class="rc-desc">People saw Karpathy's announcement post in <strong>just 48 hours</strong> — it went globally viral</div>
+      </div>
+      <div class="rc rc-bug">
+        <div class="rc-big">🐛 → ✅</div>
+        <div class="rc-desc">The AI even <strong>found a hidden mistake</strong> in Karpathy's own work that he had missed for months</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- S6 WHAT IT MEANS -->
+  <div class="slide" id="s6">
+    <div class="eyebrow">What This Means For All Of Us</div>
+    <div class="headline" style="font-size:clamp(36px,5.5vw,72px);">AI becoming a <span class="a">true partner</span> in discovery</div>
+    <div class="meaning-cards">
+      <div class="mc"><div class="mc-icon">⚡</div><div class="mc-title">Speed</div><div class="mc-desc">Progress that once took months can now happen in a single night</div></div>
+      <div class="mc"><div class="mc-icon">🌍</div><div class="mc-title">Access</div><div class="mc-desc">Anyone with a laptop can now do research that once needed a full team</div></div>
+      <div class="mc"><div class="mc-icon">🧠</div><div class="mc-title">Focus</div><div class="mc-desc">Humans set the big vision. AI handles the repetitive testing. We think bigger.</div></div>
+      <div class="mc"><div class="mc-icon">🔓</div><div class="mc-title">Free to Use</div><div class="mc-desc">Released openly so anyone anywhere in the world can build on it</div></div>
+    </div>
+    <div class="quote-block">
+      <div class="qt">"The goal is not to replace the scientist — it's to give every scientist <strong>a thousand tireless assistants."</strong></div>
+      <div class="qa">— Inspired by Andrej Karpathy's vision</div>
+    </div>
+  </div>
+
+</div>
+
+<div id="subtitle-bar">
+  <div id="subtitle-text">Loading<span class="cursor"></span></div>
+</div>
+
+<script>
+const TOTAL_MS = 60000;
+const slides = document.querySelectorAll('.slide');
+const slideTimes = [0,10000,20000,30000,40000,50000];
+const subtitles = [
+  [
+    { at:0,    text:"In March 2026, one of the world's most respected AI scientists shared something remarkable — <strong>a tool that does scientific research by itself, while you sleep.</strong>" },
+    { at:5500, text:"His name is Andrej Karpathy. He helped build ChatGPT and led AI research at Tesla. His new project is called <strong>AutoResearch</strong> — and it went viral immediately." }
+  ],[
+    { at:0,    text:"To understand why this matters, imagine how AI research has always worked. A scientist gets an idea, spends hours testing it, checks whether it worked, and starts all over again." },
+    { at:5500, text:"This exhausting cycle might produce around ten experiments a week. Progress is bottlenecked by <strong>how fast a human can work</strong> — and humans need to eat, rest, and sleep." }
+  ],[
+    { at:0,    text:"Karpathy's big idea was simple: <strong>what if an AI could run those experiments instead of you?</strong> You describe what you want to improve, and the AI handles everything else." },
+    { at:5500, text:"Think of it like having a robot lab assistant. You leave a note explaining your goal. Overnight, it runs hundreds of trials — keeping what works, discarding what doesn't — <strong>no supervision needed.</strong>" }
+  ],[
+    { at:0,    text:"Here's how it plays out. You go to bed. Every five minutes, the AI tries something new. That adds up to <strong>around 100 experiments in a single night</strong> — all automatic." },
+    { at:5500, text:"When something works better than before, the AI saves it and keeps going. When something fails, it's quietly thrown away. By morning, you have <strong>a log of real discoveries</strong> ready to read." }
+  ],[
+    { at:0,    text:"The reaction was immediate and global. Over <strong>21,000 people bookmarked the project</strong> within days, and 8.6 million people saw Karpathy's announcement in under 48 hours." },
+    { at:5500, text:"Shopify's CEO tried it on his company's website and the AI made it <strong>53% faster — overnight, automatically.</strong> The AI even found a mistake in Karpathy's own work that he'd missed for months." }
+  ],[
+    { at:0,    text:"The real significance here goes beyond AI research. AutoResearch points to a future where <strong>AI becomes a genuine partner in discovery</strong> — not a replacement for human creativity, but a multiplier of it." },
+    { at:5500, text:"Anyone with a laptop can now run experiments that once required a full team and months of work. The bottleneck is no longer <strong>how fast we can work</strong> — it's <strong>how boldly we can imagine.</strong>" }
+  ]
+];
+
+let startTime=null, elapsed=0, animFrame=null, paused=false, currentSlide=0;
+const progressFill=document.getElementById('progress-fill');
+const timerEl=document.getElementById('timer');
+const subtitleEl=document.getElementById('subtitle-text');
+const curSlideEl=document.getElementById('cur-slide');
+const playBtn=document.getElementById('play-btn');
+
+function fmt(ms){const s=Math.floor(ms/1000);return`0:${s.toString().padStart(2,'0')}`;}
+function goToSlide(idx){if(idx===currentSlide)return;slides[currentSlide].classList.remove('active');currentSlide=idx;slides[currentSlide].classList.add('active');curSlideEl.textContent=currentSlide+1;}
+function updateSub(si,se){const subs=subtitles[si];let t=subs[0].text;for(let i=0;i<subs.length;i++){if(se>=subs[i].at)t=subs[i].text;}subtitleEl.innerHTML=t;}
+function tick(ts){
+  if(!startTime)startTime=ts;
+  elapsed=ts-startTime;
+  if(elapsed>=TOTAL_MS){elapsed=TOTAL_MS;progressFill.style.width='100%';timerEl.textContent='1:00 / 1:00';updateSub(5,10000);return;}
+  progressFill.style.width=(elapsed/TOTAL_MS*100)+'%';
+  timerEl.textContent=`${fmt(elapsed)} / 1:00`;
+  let t=0;for(let i=slideTimes.length-1;i>=0;i--){if(elapsed>=slideTimes[i]){t=i;break;}}
+  if(t!==currentSlide)goToSlide(t);
+  updateSub(currentSlide,elapsed-slideTimes[currentSlide]);
+  animFrame=requestAnimationFrame(tick);
+}
+function togglePlay(){if(paused){paused=false;playBtn.textContent='⏸ PAUSE';startTime=performance.now()-elapsed;animFrame=requestAnimationFrame(tick);}else{paused=true;playBtn.textContent='▶ PLAY';cancelAnimationFrame(animFrame);}}
+function restartPres(){cancelAnimationFrame(animFrame);paused=false;playBtn.textContent='⏸ PAUSE';slides[currentSlide].classList.remove('active');currentSlide=0;slides[0].classList.add('active');curSlideEl.textContent='1';startTime=null;elapsed=0;progressFill.style.width='0%';animFrame=requestAnimationFrame(tick);}
+window.addEventListener('load',()=>{setTimeout(()=>{animFrame=requestAnimationFrame(tick);},300);});
+</script>
+</body>
+</html>
