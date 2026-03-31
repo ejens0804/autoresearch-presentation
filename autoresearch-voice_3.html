@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AutoResearch — Karpathy (With Voice Narration)</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --surface-2: #1a1a28;
+    --accent: #6c5ce7;
+    --accent-glow: #a29bfe;
+    --text: #e8e8f0;
+    --text-dim: #8888a0;
+    --success: #00cec9;
+    --warn: #fdcb6e;
+    --danger: #ff6b6b;
+    --card-bg: rgba(255,255,255,0.04);
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html { font-size: 16px; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Grotesk', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── MAIN CONTAINER ────────────────────── */
+  .presentation {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 2rem;
+    padding-bottom: 220px; /* room for caption bar */
+  }
+
+  /* ── HEADER BAR ────────────────────────── */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 0;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    margin-bottom: 2rem;
+  }
+  .header-left { font-size: 0.85rem; color: var(--text-dim); font-weight:500; letter-spacing:0.05em; }
+  .header-right { display: flex; gap: 1rem; align-items: center; }
+  .slide-counter { font-family: 'JetBrains Mono', monospace; font-size:0.8rem; color: var(--accent-glow); }
+
+  /* ── CONTROLS ──────────────────────────── */
+  .controls {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    margin-bottom: 2rem;
+  }
+  .btn {
+    background: var(--surface-2);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: var(--text);
+    padding: 0.5rem 1.2rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.82rem;
+    font-weight: 500;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .btn:hover { background: var(--accent); border-color: var(--accent); transform: translateY(-1px); }
+  .btn.active { background: var(--accent); border-color: var(--accent-glow); box-shadow: 0 0 20px rgba(108,92,231,0.3); }
+  .btn.voice-btn { background: linear-gradient(135deg, #6c5ce7, #a29bfe); border:none; }
+  .btn.voice-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 25px rgba(108,92,231,0.5); }
+  .btn.voice-btn.muted { background: var(--surface-2); border: 1px solid rgba(255,255,255,0.08); }
+
+  /* ── PROGRESS BAR ──────────────────────── */
+  .progress-wrap {
+    width: 100%;
+    height: 4px;
+    background: var(--surface-2);
+    border-radius: 4px;
+    margin-bottom: 2rem;
+    overflow: hidden;
+  }
+  .progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent-glow));
+    border-radius: 4px;
+    transition: width 0.6s ease;
+    width: 0%;
+  }
+
+  /* ── SLIDE AREA ────────────────────────── */
+  .slide {
+    display: none;
+    animation: fadeSlideIn 0.7s ease forwards;
+  }
+  .slide.active { display: block; }
+  @keyframes fadeSlideIn {
+    from { opacity:0; transform:translateY(30px); }
+    to   { opacity:1; transform:translateY(0); }
+  }
+
+  /* ── SLIDE STYLES ──────────────────────── */
+  .slide-label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--accent-glow);
+    margin-bottom: 0.6rem;
+    font-weight: 600;
+  }
+  .slide-title {
+    font-size: clamp(2rem, 5vw, 3.2rem);
+    font-weight: 700;
+    line-height: 1.15;
+    margin-bottom: 0.8rem;
+    background: linear-gradient(135deg, #fff 30%, var(--accent-glow));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .slide-subtitle {
+    font-size: 1.15rem;
+    color: var(--text-dim);
+    max-width: 600px;
+    line-height: 1.6;
+    margin-bottom: 2rem;
+  }
+
+  /* stat cards */
+  .stats-row {
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    margin-top: 1.5rem;
+  }
+  .stat-card {
+    background: var(--card-bg);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 14px;
+    padding: 1.5rem;
+    flex: 1;
+    min-width: 160px;
+    text-align: center;
+    backdrop-filter: blur(10px);
+  }
+  .stat-num {
+    font-size: 2.2rem;
+    font-weight: 700;
+    color: var(--accent-glow);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .stat-label { font-size: 0.82rem; color: var(--text-dim); margin-top: 0.4rem; }
+
+  /* flow */
+  .flow-row {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+    margin: 1.5rem 0;
+  }
+  .flow-item {
+    background: var(--card-bg);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+    padding: 1rem 1.2rem;
+    text-align: center;
+    flex: 1;
+    min-width: 100px;
+  }
+  .flow-icon { font-size: 1.6rem; margin-bottom: 0.4rem; }
+  .flow-label { font-size: 0.78rem; color: var(--text-dim); }
+  .flow-arrow { color: var(--accent-glow); font-size: 1.2rem; flex: 0; }
+
+  /* feature grid */
+  .feature-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1.2rem;
+    margin-top: 1.5rem;
+  }
+  .feature-card {
+    background: var(--card-bg);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 14px;
+    padding: 1.5rem;
+    backdrop-filter: blur(10px);
+    transition: transform 0.3s, border-color 0.3s;
+  }
+  .feature-card:hover { transform: translateY(-4px); border-color: var(--accent); }
+  .feature-card .icon { font-size: 1.8rem; margin-bottom: 0.6rem; }
+  .feature-card h3 { font-size: 1rem; margin-bottom: 0.4rem; font-weight: 600; }
+  .feature-card p { font-size: 0.82rem; color: var(--text-dim); line-height: 1.5; }
+
+  /* timeline items */
+  .timeline { margin-top: 1.5rem; }
+  .timeline-item {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+    margin-bottom: 1.2rem;
+    padding: 1rem;
+    border-radius: 12px;
+    background: var(--card-bg);
+    border: 1px solid rgba(255,255,255,0.05);
+  }
+  .timeline-icon {
+    font-size: 1.6rem;
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(108,92,231,0.15);
+    border-radius: 10px;
+  }
+  .timeline-text { font-size: 0.92rem; color: var(--text-dim); line-height: 1.6; }
+  .timeline-text strong { color: var(--text); }
+
+  /* quote */
+  .quote-block {
+    margin-top: 2rem;
+    padding: 1.5rem 2rem;
+    border-left: 3px solid var(--accent);
+    background: rgba(108,92,231,0.06);
+    border-radius: 0 12px 12px 0;
+    font-style: italic;
+    color: var(--text-dim);
+    line-height: 1.7;
+    font-size: 1rem;
+  }
+  .quote-block .author { display:block; margin-top:0.6rem; font-style:normal; font-size:0.82rem; color: var(--accent-glow); }
+
+  /* ── CAPTION BAR (FIXED BOTTOM) ────────── */
+  .caption-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(180deg, transparent, rgba(10,10,15,0.95) 20%, rgba(10,10,15,1));
+    padding: 2rem 2rem 1.8rem;
+    z-index: 100;
+  }
+  .caption-inner {
+    max-width: 900px;
+    margin: 0 auto;
+    text-align: center;
+  }
+  .caption-text {
+    font-size: 1.1rem;
+    color: var(--text);
+    line-height: 1.7;
+    min-height: 3rem;
+    transition: opacity 0.4s;
+  }
+  .caption-text .emphasis {
+    color: var(--accent-glow);
+    font-weight: 600;
+  }
+  .caption-text.fading { opacity: 0; }
+
+  /* voice indicator */
+  .voice-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-top: 0.8rem;
+    font-size: 0.72rem;
+    color: var(--accent-glow);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .voice-indicator.speaking { opacity: 1; }
+  .voice-bars {
+    display: flex;
+    gap: 2px;
+    align-items: flex-end;
+    height: 14px;
+  }
+  .voice-bars span {
+    width: 3px;
+    background: var(--accent-glow);
+    border-radius: 2px;
+    animation: barPulse 0.6s ease-in-out infinite alternate;
+  }
+  .voice-bars span:nth-child(1) { height: 4px; animation-delay: 0s; }
+  .voice-bars span:nth-child(2) { height: 10px; animation-delay: 0.15s; }
+  .voice-bars span:nth-child(3) { height: 6px; animation-delay: 0.3s; }
+  .voice-bars span:nth-child(4) { height: 12px; animation-delay: 0.1s; }
+  .voice-bars span:nth-child(5) { height: 5px; animation-delay: 0.25s; }
+  @keyframes barPulse {
+    from { transform: scaleY(0.5); }
+    to   { transform: scaleY(1.5); }
+  }
+
+  /* ── AMBIENT BG ────────────────────────── */
+  .ambient-orb {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(120px);
+    pointer-events: none;
+    z-index: -1;
+    opacity: 0.15;
+  }
+  .orb-1 { width:500px; height:500px; background:var(--accent); top:-100px; left:-100px; }
+  .orb-2 { width:400px; height:400px; background:#00cec9; bottom:100px; right:-80px; }
+
+  @media(max-width:640px){
+    .presentation { padding: 1rem; padding-bottom: 200px; }
+    .stats-row, .feature-grid { grid-template-columns: 1fr; }
+    .flow-row { flex-direction: column; }
+    .flow-arrow { transform: rotate(90deg); }
+  }
+</style>
+</head>
+<body>
+
+<div class="ambient-orb orb-1"></div>
+<div class="ambient-orb orb-2"></div>
+
+<div class="presentation">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">ANDREJ KARPATHY · MARCH 2026</div>
+    <div class="header-right">
+      <span class="slide-counter" id="slideCounter">SLIDE 1 / 6</span>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <button class="btn" id="restartBtn" onclick="restart()">↺ Restart</button>
+    <button class="btn" id="pauseBtn" onclick="togglePause()">⏸ Pause</button>
+    <button class="btn" id="prevBtn" onclick="prevSlide()">◀ Prev</button>
+    <button class="btn" id="nextBtn" onclick="nextSlide()">Next ▶</button>
+    <button class="btn voice-btn" id="voiceBtn" onclick="toggleVoice()">🔊 Voice ON</button>
+  </div>
+
+  <!-- Progress -->
+  <div class="progress-wrap"><div class="progress-bar" id="progressBar"></div></div>
+
+  <!-- ═══════════ SLIDE 1 ═══════════ -->
+  <div class="slide active" id="slide-0">
+    <div class="slide-label">Free & Open Source</div>
+    <div class="slide-title">AUTORESEARCH</div>
+    <div class="slide-subtitle">The AI that never sleeps. What if AI ran hundreds of experiments overnight — so you wake up to answers?</div>
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-num" style="color:var(--success)">21,000+</div>
+        <div class="stat-label">People Already Excited</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ SLIDE 2 ═══════════ -->
+  <div class="slide" id="slide-1">
+    <div class="slide-label">The Problem</div>
+    <div class="slide-title">Science meant a lot of waiting</div>
+    <div class="flow-row">
+      <div class="flow-item"><div class="flow-icon">💡</div><div class="flow-label">Have idea</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-item"><div class="flow-icon">🛠️</div><div class="flow-label">Try it</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-item"><div class="flow-icon">⏳</div><div class="flow-label">Wait hours</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-item"><div class="flow-icon">📋</div><div class="flow-label">Check results</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-item"><div class="flow-icon">🔁</div><div class="flow-label">Repeat</div></div>
+    </div>
+    <div class="stats-row">
+      <div class="stat-card"><div class="stat-num">~10</div><div class="stat-label">experiments per week</div></div>
+      <div class="stat-card"><div class="stat-num">100%</div><div class="stat-label">human effort</div></div>
+      <div class="stat-card"><div class="stat-num" style="color:var(--danger)">SLOW</div><div class="stat-label">progress</div></div>
+    </div>
+  </div>
+
+  <!-- ═══════════ SLIDE 3 ═══════════ -->
+  <div class="slide" id="slide-2">
+    <div class="slide-label">The Big Idea</div>
+    <div class="slide-title">What if AI did the experimenting?</div>
+    <div class="slide-subtitle">A robot lab assistant. Leave a note on the whiteboard. Overnight, it runs hundreds of trials, keeps what works, tosses what doesn't. You wake up to real discoveries.</div>
+    <div class="feature-grid">
+      <div class="feature-card"><div class="icon">📝</div><h3>You Describe</h3><p>What you want improved</p></div>
+      <div class="feature-card"><div class="icon">🤖</div><h3>AI Experiments</h3><p>Tries ideas on its own</p></div>
+      <div class="feature-card"><div class="icon">✅</div><h3>Keeps Winners</h3><p>Bad results auto-discarded</p></div>
+    </div>
+  </div>
+
+  <!-- ═══════════ SLIDE 4 ═══════════ -->
+  <div class="slide" id="slide-3">
+    <div class="slide-label">How It Works</div>
+    <div class="slide-title">Go to sleep. Wake up to answers.</div>
+    <div class="timeline">
+      <div class="timeline-item"><div class="timeline-icon">💤</div><div class="timeline-text">You sleep. AI runs one experiment every <strong>5 minutes</strong>.</div></div>
+      <div class="timeline-item"><div class="timeline-icon">✅</div><div class="timeline-text"><strong>Better result</strong> → saved as the new baseline, keeps going.</div></div>
+      <div class="timeline-item"><div class="timeline-icon">❌</div><div class="timeline-text"><strong>Worse result</strong> → discarded automatically. No human needed.</div></div>
+      <div class="timeline-item"><div class="timeline-icon">☀️</div><div class="timeline-text">You wake up to a <strong>log of discoveries</strong> — automatically.</div></div>
+    </div>
+    <div class="stats-row">
+      <div class="stat-card"><div class="stat-num">~100</div><div class="stat-label">experiments overnight</div></div>
+      <div class="stat-card"><div class="stat-num">5 min</div><div class="stat-label">per experiment</div></div>
+      <div class="stat-card"><div class="stat-num">0</div><div class="stat-label">humans required</div></div>
+    </div>
+  </div>
+
+  <!-- ═══════════ SLIDE 5 ═══════════ -->
+  <div class="slide" id="slide-4">
+    <div class="slide-label">Why the World Is Paying Attention</div>
+    <div class="slide-title">Real results, overnight</div>
+    <div class="stats-row">
+      <div class="stat-card"><div class="stat-num">21K+</div><div class="stat-label">GitHub bookmarks in days</div></div>
+      <div class="stat-card"><div class="stat-num" style="color:var(--success)">53%</div><div class="stat-label">Shopify got 53% faster overnight</div></div>
+      <div class="stat-card"><div class="stat-num">8.6M</div><div class="stat-label">Views in 48 hours</div></div>
+      <div class="stat-card"><div class="stat-num" style="color:var(--warn)">🐛→✅</div><div class="stat-label">AI found a hidden bug</div></div>
+    </div>
+  </div>
+
+  <!-- ═══════════ SLIDE 6 ═══════════ -->
+  <div class="slide" id="slide-5">
+    <div class="slide-label">What This Means For Everyone</div>
+    <div class="slide-title">AI as a true partner in discovery</div>
+    <div class="feature-grid">
+      <div class="feature-card"><div class="icon">⚡</div><h3>Speed</h3><p>Months of progress in a single night</p></div>
+      <div class="feature-card"><div class="icon">🌍</div><h3>Access</h3><p>Anyone with a laptop can run this</p></div>
+      <div class="feature-card"><div class="icon">🧠</div><h3>Focus</h3><p>Humans imagine. AI handles the rest.</p></div>
+      <div class="feature-card"><div class="icon">🔓</div><h3>Free</h3><p>Open source — anyone can build on it</p></div>
+    </div>
+    <div class="quote-block">
+      "The goal is not to replace the scientist — it's to give every scientist <strong>a thousand tireless assistants.</strong>"
+      <span class="author">— Inspired by Andrej Karpathy's vision</span>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════ CAPTION BAR ═══════════ -->
+<div class="caption-bar">
+  <div class="caption-inner">
+    <div class="caption-text" id="captionText"></div>
+    <div class="voice-indicator" id="voiceIndicator">
+      <div class="voice-bars"><span></span><span></span><span></span><span></span><span></span></div>
+      <span>Speaking…</span>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// CAPTION DATA — each caption has a `window` (ms) = time
+// available before the next caption appears. The voice
+// rate is computed dynamically so speech always finishes
+// within that window.
+// ═══════════════════════════════════════════════════════
+const SLIDE_DURATION = 25000; // fallback only
+
+const CAPTIONS = [
+  // ── Slide 1 ── (23s total)
+  [
+    { text: "This is AutoResearch. An open-source project that's getting the whole AI community excited.",
+      delay: 0, window: 6000, emphasis: ["AutoResearch", "open-source", "excited"], tone: "intro" },
+    { text: "Imagine this: you set a goal before bed. AI runs hundreds of experiments while you sleep.",
+      delay: 6000, window: 7000, emphasis: ["hundreds", "experiments", "sleep"], tone: "wonder" },
+    { text: "You wake up, and the answers are already there.",
+      delay: 13000, window: 4500, emphasis: ["wake up", "answers", "already"], tone: "dramatic" },
+    { text: "Over twenty-one thousand people are already on board. Let's find out why.",
+      delay: 17500, window: 5500, emphasis: ["twenty-one thousand", "already"], tone: "buildup" },
+  ],
+  // ── Slide 2 ── (22s total)
+  [
+    { text: "For decades, science has looked like this. Have an idea. Try it. Wait. Check. Repeat.",
+      delay: 0, window: 7000, emphasis: ["decades", "Wait", "Repeat"], tone: "slow" },
+    { text: "A researcher might run ten experiments per week. Each one takes hours of focused human effort.",
+      delay: 7000, window: 7000, emphasis: ["ten", "hours", "human effort"], tone: "concern" },
+    { text: "Progress was painfully slow. Not because scientists lacked talent, but because there weren't enough hours in the day.",
+      delay: 14000, window: 8000, emphasis: ["painfully slow", "talent", "hours"], tone: "dramatic" },
+  ],
+  // ── Slide 3 ── (26s total)
+  [
+    { text: "But what if there was a better way? What if AI could do the experimenting for you?",
+      delay: 0, window: 7500, emphasis: ["better way", "AI", "experimenting"], tone: "wonder" },
+    { text: "Think of it as a robot lab assistant. You describe what you want improved. Then you leave.",
+      delay: 7500, window: 7500, emphasis: ["robot lab assistant", "describe", "leave"], tone: "calm" },
+    { text: "Overnight, it runs hundreds of trials. It keeps what works. It tosses what doesn't.",
+      delay: 15000, window: 6500, emphasis: ["hundreds of trials", "keeps", "tosses"], tone: "energetic" },
+    { text: "And by morning? Real discoveries. Waiting right there for you.",
+      delay: 21500, window: 4500, emphasis: ["morning", "Real discoveries", "right there"], tone: "dramatic" },
+  ],
+  // ── Slide 4 ── (24s total)
+  [
+    { text: "Here's how the loop actually works. You go to sleep. The AI fires up.",
+      delay: 0, window: 6500, emphasis: ["loop", "sleep", "fires up"], tone: "buildup" },
+    { text: "Every five minutes, it runs a new experiment. Better result? Saved as the new baseline.",
+      delay: 6500, window: 7000, emphasis: ["five minutes", "Better result", "new baseline"], tone: "energetic" },
+    { text: "Worse result? Discarded. Automatically. No human in the loop.",
+      delay: 13500, window: 4500, emphasis: ["Discarded", "Automatically", "No human"], tone: "firm" },
+    { text: "By sunrise, you have roughly a hundred experiments logged. Zero human effort required.",
+      delay: 18000, window: 6000, emphasis: ["hundred experiments", "Zero", "human effort"], tone: "dramatic" },
+  ],
+  // ── Slide 5 ── (25s total)
+  [
+    { text: "And the world is starting to notice. Twenty-one thousand GitHub stars in just a few days.",
+      delay: 0, window: 7000, emphasis: ["world", "Twenty-one thousand", "few days"], tone: "energetic" },
+    { text: "Shopify used it and got their website fifty-three percent faster. Overnight.",
+      delay: 7000, window: 5000, emphasis: ["Shopify", "fifty-three percent", "Overnight"], tone: "surprise" },
+    { text: "Eight point six million people watched the announcement in just forty-eight hours.",
+      delay: 12000, window: 5500, emphasis: ["Eight point six million", "forty-eight hours"], tone: "wonder" },
+    { text: "And here's the kicker — the AI found a hidden bug that Karpathy himself missed for months.",
+      delay: 17500, window: 7500, emphasis: ["kicker", "hidden bug", "Karpathy", "months"], tone: "surprise" },
+  ],
+  // ── Slide 6 ── (28s total)
+  [
+    { text: "So what does this mean for the rest of us? It means AI is becoming a true partner in discovery.",
+      delay: 0, window: 8500, emphasis: ["rest of us", "true partner", "discovery"], tone: "calm" },
+    { text: "Speed: months of progress compressed into a single night. Access: anyone with a laptop can run this.",
+      delay: 8500, window: 7000, emphasis: ["months", "single night", "anyone", "laptop"], tone: "energetic" },
+    { text: "Humans do what they do best — imagine, dream, ask the big questions. AI handles the grind.",
+      delay: 15500, window: 7000, emphasis: ["imagine", "dream", "big questions", "grind"], tone: "wonder" },
+    { text: "It's free. It's open source. The goal? Give every scientist a thousand tireless assistants.",
+      delay: 22500, window: 6000, emphasis: ["free", "open source", "every scientist", "thousand tireless assistants"], tone: "dramatic" },
+  ],
+];
+
+// ═══════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════
+let currentSlide = 0;
+let paused = false;
+let voiceEnabled = true;
+let selectedVoice = null;
+
+// ═══════════════════════════════════════════════════════
+// VOICE ENGINE — comfortable speed with hard ceiling
+// ═══════════════════════════════════════════════════════
+// Comfortable speaking rate — 1.1 ≈ 145 WPM, a natural presenter pace.
+// Speech is never rushed; the caption system waits for voice to finish.
+const DEFAULT_RATE = 1.1;
+
+function initVoice() {
+  const synth = window.speechSynthesis;
+  const loadVoices = () => {
+    const voices = synth.getVoices();
+    const preferred = [
+      'Google UK English Male',
+      'Microsoft David',
+      'Microsoft Mark',
+      'Google US English',
+      'Daniel',
+      'Alex',
+      'Aaron',
+      'Reed',
+      'Rishi',
+    ];
+    for (const name of preferred) {
+      const match = voices.find(v => v.name.includes(name) && v.lang.startsWith('en'));
+      if (match) { selectedVoice = match; break; }
+    }
+    if (!selectedVoice) {
+      selectedVoice = voices.find(v => v.lang.startsWith('en') && /male|david|mark|daniel|james|guy/i.test(v.name));
+    }
+    if (!selectedVoice) {
+      selectedVoice = voices.find(v => v.lang.startsWith('en'));
+    }
+    if (selectedVoice) console.log('Voice:', selectedVoice.name);
+  };
+  if (synth.getVoices().length) loadVoices();
+  synth.onvoiceschanged = loadVoices;
+}
+
+// Tone presets — pitch & volume create tonal variety.
+// Rate is NO LONGER set per-tone. It's computed purely from
+// Rate is fixed at DEFAULT_RATE — the speech-gated system handles timing.
+const TONE_MAP = {
+  intro:    { pitch: 1.0,  volume: 1.0 },
+  calm:     { pitch: 0.92, volume: 0.95 },
+  wonder:   { pitch: 1.12, volume: 1.0 },
+  concern:  { pitch: 0.88, volume: 0.95 },
+  slow:     { pitch: 0.92, volume: 0.95 },
+  energetic:{ pitch: 1.15, volume: 1.0 },
+  dramatic: { pitch: 1.05, volume: 1.0 },
+  buildup:  { pitch: 1.02, volume: 0.95 },
+  firm:     { pitch: 0.90, volume: 1.0 },
+  surprise: { pitch: 1.18, volume: 1.0 },
+};
+
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Speak caption text. Returns a Promise that resolves when speech finishes.
+// If voice is off, resolves immediately.
+function speakCaption(captionObj) {
+  return new Promise((resolve) => {
+    if (!voiceEnabled) { resolve(); return; }
+    const synth = window.speechSynthesis;
+    synth.cancel();
+
+    const tone = TONE_MAP[captionObj.tone] || TONE_MAP.intro;
+
+    const utterance = new SpeechSynthesisUtterance(captionObj.text);
+    if (selectedVoice) utterance.voice = selectedVoice;
+    utterance.pitch  = tone.pitch;
+    utterance.rate   = DEFAULT_RATE; // Always comfortable speed
+    utterance.volume = tone.volume;
+
+    let resolved = false;
+    const finish = () => {
+      if (resolved) return;
+      resolved = true;
+      document.getElementById('voiceIndicator').classList.remove('speaking');
+      resolve();
+    };
+
+    utterance.onstart = () => {
+      document.getElementById('voiceIndicator').classList.add('speaking');
+    };
+    utterance.onend   = finish;
+    utterance.onerror = finish;
+
+    synth.speak(utterance);
+
+    // Safety net: if TTS engine hangs, resolve after 12s
+    setTimeout(finish, 12000);
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// SPEECH-GATED CAPTION SYSTEM
+// ═══════════════════════════════════════════════════════
+// Voice ON:  each caption WAITS for speech to finish before advancing.
+//            → Zero chance of cut-off, regardless of TTS speed.
+// Voice OFF: uses the `window` timing as a fallback delay.
+
+let sequenceId = 0; // incremented on each goToSlide to cancel prior sequences
+
+async function runCaptionSequence(captions, myId) {
+  for (let i = 0; i < captions.length; i++) {
+    if (myId !== sequenceId || paused) return;
+
+    const cap = captions[i];
+    const el = document.getElementById('captionText');
+
+    // Fade out old caption
+    el.classList.add('fading');
+    await sleep(250);
+    if (myId !== sequenceId) return;
+
+    // Render new caption with emphasis highlights
+    let html = cap.text;
+    if (cap.emphasis) {
+      for (const word of cap.emphasis) {
+        const regex = new RegExp(`(${escapeRegex(word)})`, 'gi');
+        html = html.replace(regex, '<span class="emphasis">$1</span>');
+      }
+    }
+    el.innerHTML = html;
+    el.classList.remove('fading');
+
+    if (voiceEnabled) {
+      // SPEECH-GATED: wait until voice actually finishes
+      await speakCaption(cap);
+      if (myId !== sequenceId) return;
+      // Natural breathing pause between sentences
+      await sleep(450);
+    } else {
+      // TIMER FALLBACK when voice is off
+      await sleep(cap.window);
+    }
+
+    if (myId !== sequenceId) return;
+  }
+
+  // All captions done — pause, then advance
+  await sleep(1200);
+  if (myId === sequenceId && !paused && currentSlide < 5) {
+    nextSlide();
+  }
+}
+
+function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
+
+// ═══════════════════════════════════════════════════════
+// SLIDE MANAGEMENT
+// ═══════════════════════════════════════════════════════
+function goToSlide(index) {
+  sequenceId++; // cancel any running caption sequence
+  window.speechSynthesis.cancel();
+
+  document.querySelectorAll('.slide').forEach((s, i) => {
+    s.classList.toggle('active', i === index);
+  });
+
+  currentSlide = index;
+  document.getElementById('slideCounter').textContent = `SLIDE ${index + 1} / 6`;
+  document.getElementById('progressBar').style.width = `${((index + 1) / 6) * 100}%`;
+
+  const captions = CAPTIONS[index];
+  if (captions) {
+    runCaptionSequence(captions, sequenceId);
+  }
+}
+
+function nextSlide() {
+  if (currentSlide < 5) goToSlide(currentSlide + 1);
+}
+function prevSlide() {
+  if (currentSlide > 0) goToSlide(currentSlide - 1);
+}
+function restart() {
+  paused = false;
+  document.getElementById('pauseBtn').textContent = '⏸ Pause';
+  goToSlide(0);
+}
+function togglePause() {
+  paused = !paused;
+  const btn = document.getElementById('pauseBtn');
+  if (paused) {
+    btn.textContent = '▶ Resume';
+    sequenceId++; // stop current sequence
+    window.speechSynthesis.pause();
+  } else {
+    btn.textContent = '⏸ Pause';
+    window.speechSynthesis.cancel();
+    goToSlide(currentSlide); // restart current slide cleanly
+  }
+}
+function toggleVoice() {
+  voiceEnabled = !voiceEnabled;
+  const btn = document.getElementById('voiceBtn');
+  if (voiceEnabled) {
+    btn.textContent = '🔊 Voice ON';
+    btn.classList.remove('muted');
+  } else {
+    btn.textContent = '🔇 Voice OFF';
+    btn.classList.add('muted');
+    window.speechSynthesis.cancel();
+    document.getElementById('voiceIndicator').classList.remove('speaking');
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', () => {
+  initVoice();
+  setTimeout(() => goToSlide(0), 800);
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) window.speechSynthesis.cancel();
+});
+</script>
+</body>
+</html>
